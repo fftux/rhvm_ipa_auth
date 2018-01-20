@@ -1,0 +1,6 @@
+# set the engine-vm to global maintenance in the cluster
+#
+
+- name: Set the engine-vm to maintenance mode none in the cluster or for the target machine
+  command: hosted-engine --set-maintenance --mode=none
+

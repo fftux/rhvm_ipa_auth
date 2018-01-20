@@ -1,0 +1,28 @@
+#
+# Please make sure that /etc/httpd/http.keytab is available and valid.
+#
+# This file generated via rhvm_ipa_auth ansible role 
+# DO NOT EDIT MANUALLY
+# YOUR EDITS WILL BE OVER WRITTEN THE NEXT TIME THE ROLE IS APPLIED
+#
+# Last Ansible Run {{ ansible_date_time.date }}\:\: {{ ansible_date_time.time }}
+<LocationMatch ^/ovirt-engine/sso/(interactive-login-negotiate|oauth/token-http-auth)|^/ovirt-engine/api>
+  <If "req('Authorization') !~ /^(Bearer|Basic)/i">
+    RewriteEngine on
+    RewriteCond %{LA-U:REMOTE_USER} ^(.*)$
+    RewriteRule ^(.*)$ - [L,NS,P,E=REMOTE_USER:%1]
+    RequestHeader set X-Remote-User %{REMOTE_USER}s
+
+    AuthType GSSAPI
+    AuthName "Kerberos Login"
+
+    GssapiCredStore keytab:/etc/httpd/http.keytab
+    GssapiUseSessions On
+    Session On
+    SessionCookieName ovirt_gssapi_session path=/private;httponly;secure;
+
+    Require valid-user
+    ErrorDocument 401 "<html><meta http-equiv=\"refresh\" content=\"0; url=/ovirt-engine/sso/login-unauthorized\"/><body><a href=\"/ovirt-engine/sso/login-unauthorized\">Here</a></body></html>"
+  </If>
+</LocationMatch>
+

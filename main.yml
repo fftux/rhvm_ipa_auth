@@ -1,0 +1,20 @@
+---
+# Configure RHVM for LDAP and Kerberos auth with IPA
+#
+
+- name: Put the cluster into Global Maintenance
+  hosts: rhv_engine_host
+    roles:
+      - global_maintenance
+
+- name: Apply the configuration for IPA authentication
+  hosts: rhvm_vm
+    roles:
+      - rhvm_ipa_auth
+
+
+- name: Take the cluster out of Global Maintenance
+  hosts: rhv_engine_host
+    roles:
+      - none_maintenance
+

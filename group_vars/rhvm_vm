@@ -1,0 +1,23 @@
+# variables for configuring the engine vm
+
+ipa_domain = example.com
+ipa_server_fqdn = idm.example.com
+ipa_realm = IDM.EXAMPLE.COM
+ipa_admin_password = changeit
+keystore_password = changethistoo
+ssl_private_key_path = "/etc/ipa/private/{{ ansible_hostname }}.key"
+ssl_private_key_passphrase = changethisoneaswell
+ssl_private_key_cipher = aes256
+ssl_private_key_size = 4096
+ssl_public_key_path = "/etc/ipa/private/{{ ansible_hostname }}.pub"
+ssl_public_key_format = PEM
+csr_path = "/etc/ipa/private/{{ ansible_hostname }}.csr"
+csr_emailAddress = bobsurunkle@example.com
+csr_organizationName = "Example Org"
+csr_organizationUnitName = "Example Unit"
+csr_countryName = CA
+csr_stateOrProvinceName = ON
+csr_localityName = Hespeler
+csr_digest = sha256
+ssl_crt_path = "/etc/ipa/private/{{ ansible_hostname }}.crt"
+

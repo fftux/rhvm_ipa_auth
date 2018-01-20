@@ -1,0 +1,40 @@
+# This file generated via rhvm_ipa_auth ansible role 
+# DO NOT EDIT MANUALLY
+# YOUR EDITS WILL BE OVER WRITTEN THE NEXT TIME THE ROLE IS APPLIED
+#
+# Last Ansible Run {{ ansible_date_time.date }}\:\: {{ ansible_date_time.time }}
+#
+# Select one
+#
+# include = <openldap.properties>
+# include = <389ds.properties>
+# include = <rhds.properties>
+include = <ipa.properties>
+# include = <iplanet.properties>
+# include = <rfc2307-389ds.properties>
+# include = <rfc2307-rhds.properties>
+# include = <rfc2307-openldap.properties>
+# include = <rfc2307-edir.properties>
+# include = <rfc2307-generic.properties>
+
+#
+# Server
+#
+vars.server = {{ ipa_server_fqdn }}
+
+#
+# Search user and its password.
+#
+vars.user = {{ bind_user_dn }}
+vars.password = {{ bind_user_password }}
+
+pool.default.serverset.single.server = ${global:vars.server}
+pool.default.auth.simple.bindDN = ${global:vars.user}
+pool.default.auth.simple.password = ${global:vars.password}
+
+# Create keystore, import root certificate and uncomment
+# if using ssl/tls.
+pool.default.ssl.startTLS = true
+pool.default.ssl.truststore.file = ${local:_basedir}/{{ realm_name }}.jks
+pool.default.ssl.truststore.password = {{ truststore_password }}
+

@@ -1,0 +1,15 @@
+# This file generated via rhvm_ipa_auth ansible role 
+# DO NOT EDIT MANUALLY
+# YOUR EDITS WILL BE OVER WRITTEN THE NEXT TIME THE ROLE IS APPLIED
+#
+# Last Ansible Run {{ ansible_date_time.date }}\:\: {{ ansible_date_time.time }}
+
+ovirt.engine.extension.name = {{ realm_name }}-http-mapping
+ovirt.engine.extension.bindings.method = jbossmodule
+ovirt.engine.extension.binding.jbossmodule.module = org.ovirt.engine-extensions.aaa.misc
+ovirt.engine.extension.binding.jbossmodule.class = org.ovirt.engineextensions.aaa.misc.mapping.MappingExtension
+ovirt.engine.extension.provides = org.ovirt.engine.api.extensions.aaa.Mapping
+config.mapAuthRecord.type = regex
+config.mapAuthRecord.regex.mustMatch = true
+config.mapAuthRecord.regex.pattern = ^(?<user>.*?)((\\\\(?<at>@)(?<suffix>.*?)@.*)|(?<realm>@.*))$
+config.mapAuthRecord.regex.replacement = ${user}${at}${suffix}

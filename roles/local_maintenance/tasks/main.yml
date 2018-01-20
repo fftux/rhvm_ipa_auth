@@ -1,0 +1,6 @@
+# set the engine-vm to local maintenance in the cluster
+#
+
+- name: Set the engine-vm to local maintenance for the target hypervisor {{ ansible_hostname }}
+  command: hosted-engine --set-maintenance --mode=local
+

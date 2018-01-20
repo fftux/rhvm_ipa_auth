@@ -1,0 +1,280 @@
+---
+# configure the rhv manager
+#
+- name: Disable all existing repos
+  command: subscription-manager repos --disable=*
+
+- name: Enable the RHEL 7 server rpms
+  command: subscription-manager repos --enable=rhel-7-server-rpms
+
+- name: Enable the RHEL 7 Supplementary rpms
+  command: subscription-manager repos --enable=rhel-7-server-supplementary-rpms
+
+- name: Enable the RHV Manager 4.1 rpms
+  command: subscription-manager repos --enable=rhel-7-server-rhv-4.1-manager-rpms
+
+- name: Enable the RHV Manager Tools rpms
+  command: subscription-manager repos --enable=rhel-7-server-rhv-4-manager-tools-rpms
+
+- name: Enable the JBoss EAP 7 rpms
+  command: subscription-manager repos --enable=jb-eap-7-for-rhel-7-server-rpms
+
+- name: Enable the Satellite Tools 6.2 rpms
+  command: subscription-manager repos --enable=rhel-7-server-satellite-tools-6.2-rpms
+
+# Make sure that the system is up to date
+# Install some components that we need.
+#
+
+
+- name: Install ipa and the RHV authentication tools packages and update the system (this may take some time)
+  yum:
+    package: "{{ item }}"
+    state: latest
+    update_cache: yes
+  with_items:
+  - ipa-client
+  - ipa-admintools
+  - ovirt-engine-extension-aaa-ldap-setup
+  - ovirt-engine-extension-aaa-misc
+  - ovirt-engine-extension-aaa-ldap
+  - mod_auth_gssapi
+  - mod_session
+  - '*'
+
+
+- name: Unregister the host if it is already registered
+  command: ipa-client-install --uninstall --unattended
+  ignore_errors: true
+
+
+- name: Create a Service Principal Variable for the host
+  set_fact: 
+    rhvm_service_principal: "HTTP/{{ ansible_hostname }}"
+
+- name: Setup the IdM Client
+  command: "ipa-client-install --domain={{ ipa_domain }} --server={{ ipa_server_fqdn }} --realm={{ ipa_realm }} --principal=admin --password={{ ipa_admin_password }} --mkhomedir --ssh-trust-dns --enable-dns-updates --force-ntpd --unattended"
+
+
+- name: Clean up any previous service entries
+  shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-del {{ rhvm_service_principal }}"
+  ignore_errors: true
+
+
+- name: Create a service in IPA for the RHVM Apache instance
+  shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-add {{ rhvm_service_principal }}"
+
+
+- name:  retrieve the keytab and store it in /etc/httpd
+  shell: "echo {{ipa_admin_password}} | kinit admin; ipa-getkeytab -p {{ rhvm_service_principal }} -s {{ ipa_server_fqdn }} -k  /etc/httpd/http.keytab"
+
+
+- name: Ensure the proper owner and permissions on the keytab file
+  file:
+    path: /etc/httpd/http.keytab
+    owner: apache
+    group: apache
+    mode: 0400
+
+    
+- name: Ensure we can authenticate with the keytab file
+  command: "kinit -kt /etc/httpd/http.keytab {{ rhvm_service_principal }}"
+
+
+- name: Use the IPA ca.crt file to create a truststore file for engine authentication
+  command: "keytool -importcert -noprompt -trustcacerts -alias rootca -file /etc/ipa/ca.crt -keystore /etc/ovirt-engine/aaa/{{ ipa_realm }}.jks -storepass {{ keystore_password }}"
+
+
+# Create the Apache SSL Cert
+- name: Create a secure directory location for storing the cert info
+  file:
+    path: /etc/ipa/private
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+
+
+- name: Generate private key
+  openssl_privatekey:
+    path: "{{ ssl_private_key_path }}"
+    passphrase: "{{ ssl_private_key_passphrase }}"
+    cipher: "{{ ssl_private_key_cipher }}"
+    size: "{{ ssl_private_key_size }}"
+    force: false
+    type: RSA
+    state: present
+
+
+- name: Generate public key
+  openssl_publickey:
+    path: "{{ ssl_public_key_path }}"
+    privatekey_path: "{{ ssl_private_key_path }}"
+    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
+    format: "{{ ssl_public_key_format }}"
+    state: present
+
+
+- name: Generate csr
+  openssl_csr:
+    path: "{{ csr_path }}"
+    privatekey_path: "{{ ssl_private_key_path }}"
+    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
+    state: present
+    commonName: "{{ ansible_hostname }}"
+    emailAddress: "{{ csr_emailAddress }}"
+    organizationName: "{{ csr_organizationName }}"
+    organizationalUnitName: "{{ csr_organizationUnitName }}"
+    countryName: "{{ csr_countryName }}"
+    stateOrProvinceName: "{{ csr_stateOrProvinceName }}"
+    localityName: "{{ csr_localityName }}"
+    digest: "{{ csr_digest }}"
+    subjectAltName: "DNS:{{ ansible_hostname }}"
+    subjectAltName_critical: true
+
+
+- name: Have IPA sign the certificate for the service
+  shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal=HTTP/{{ ansible_hostname }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ bak_crt_path }}"
+
+
+- name: Backup the existing bundle
+  file:
+    src: /etc/pki/ovirt-engine/keys/apache.p12
+    dest: /etc/pki/ovirt-engine/keys/apache.p12.rhvm_ipa_auth.bak
+
+
+- name: Backup the existing CA certificate (belt and suspenders)
+  file: 
+    src: /etc/pki/ovirt-engine/ca.pem
+    dest: /etc/pki/ovirt-engine/ca.pem.rhvm_ipa_auth.bak
+
+
+- name: Backup the existing private key
+  file:
+    src: /etc/pki/ovirt-engine/keys/apache.key.nopass
+    dest: /etc/pki/ovirt-engine/keys/apache.key.nopass.rhvm_ipa_auth.bak
+
+
+- name: Backup the exiting certificate
+  file:
+    src: /etc/pki/ovirt-engine/certs/apache.cer
+    dest: /etc/pki/ovirt-engine/certs/apache.cer.rhvm_ipa_auth.bak
+
+
+- name: Add ipa ca cert to the host-wide trust store
+  file: 
+    src: /etc/ipa/ca.crt
+    dest: /etc/pki/ca-trust/source/anchors
+
+
+- name: Update the running trust info
+  command: update-ca-trust
+
+
+- name: Remove the symbolic link to the apache-ca.pem certificate
+  command: rm /etc/pki/ovirt-engine/apache-ca.pem
+
+
+- name: Copy the IPA CA cert to the expected Engine CA Cert location (replace ln)
+  file:
+    src: /etc/ipa/ca.crt
+    dest: /etc/pki/ovirt-engine/apache-ca.pem
+
+
+- name: Copy the new private key to the appropriate location
+  file:
+    src: "{{ ssl_private_key_path }}"
+    dest: /etc/pki/ovirt-engine/keys/apache.key.nopass
+
+
+- name: Copy the SSL cert to the proper location
+  file:
+    src: "{{ ssl_crt_path }}"
+    dest: /etc/pki/ovirt-engine/certs/apache.cer
+    mode: 0400
+    owner: apache
+    group: apache
+
+
+# Apply the templates for LDAP and Kerberos integration
+- name: Apply the template for the truststore
+  template:
+    src: 99-custom-truststore.conf.j2
+    dest: /etc/ovirt-engine/engine.conf.d/99-custom-truststore.conf
+    owner: root
+    group: root
+    mode: 0744
+
+
+- name: Apply the template for the Log Collector
+  template:
+    src: 99-custom-ca-cert.conf.j2
+    dest: /etc/ovirt-engine/logcollector.conf.d/99-custom-ca-cert.conf
+    owner: root
+    group: root
+    mode: 0744
+
+
+- name: Apply the template for /etc/httpd/conf.d/ovirt-sso.conf
+  template:
+    src: ovirt-sso.conf.j2
+    dest: /etc/httpd/conf.d/ovirt-sso.conf
+    owner: root
+    group: root
+    mode: 0644
+
+
+- name: Apply the template for /etc/ovirt-engine/aaa/{{ ipa_realm }}.properties
+  template:
+    src: profile1.properties.j2
+    dest: "/etc/ovirt-engine/aaa/{{ ipa_realm }}.properties"
+    owner: ovirt
+    group: ovirt
+    mode: 0600
+
+
+- name: Apply the template for /etc/ovirt-engine/extensions.d/{{ ipa_realm }}-http-authn.properties
+  template:
+    src: profile1-http-authn.properties.j2
+    dest: "/etc/ovirt-engine/extensions.d/{{ ipa_realm }}-http-authn.properties"
+    owner: ovirt
+    group: ovirt
+    mode: 0600
+
+
+- name: Apply the template for /etc/ovirt-engine/extensions.d/{{ ipa_realm }}-authz.properties 
+  template:
+    src: profile1-authz.properties.j2
+    dest: "/etc/ovirt-engine/extensions.d/{{ ipa_realm }}-authz.properties"
+    owner: ovirt
+    group: ovirt
+    mode: 0600
+
+
+- name: Apply the template for /etc/ovirt-engine/extensions.d/{{ ipa_realm }}-http-mapping.properties 
+  template:
+    src: profile1-http-mapping.properties.j2
+    dest: "/etc/ovirt-engine/extensions.d/{{ ipa_realm }}-http-mapping.properties"
+    owner: ovirt
+    group: ovirt
+    mode: 0600
+
+
+- name: Restart the Apache Server Service
+  service:
+    name: httpd
+    enabled: yes
+    state: restarted
+
+
+# NOTE: this will cause the HA Engine Service to restart the enginge vm 
+# if the system hosting the service in not on Local Maintenance mode
+# or the cluster is not in Global Maintenance mode
+# We will manage this in main.yml to apply this at the cluster level
+- name: Restart the Engine Service
+  service:
+    name: ovirt-engine
+    enabled: yes
+    state: restarted
+
+
