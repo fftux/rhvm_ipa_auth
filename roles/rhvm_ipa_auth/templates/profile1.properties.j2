@@ -35,6 +35,6 @@ pool.default.auth.simple.password = ${global:vars.password}
 # Create keystore, import root certificate and uncomment
 # if using ssl/tls.
 pool.default.ssl.startTLS = true
-pool.default.ssl.truststore.file = ${local:_basedir}/{{ realm_name }}.jks
+pool.default.ssl.truststore.file = ${local:_basedir}/{{ ipa_realm }}.jks
 pool.default.ssl.truststore.password = {{ truststore_password }}
 

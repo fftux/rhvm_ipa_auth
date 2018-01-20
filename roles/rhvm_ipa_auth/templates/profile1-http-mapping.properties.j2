@@ -4,7 +4,7 @@
 #
 # Last Ansible Run {{ ansible_date_time.date }}\:\: {{ ansible_date_time.time }}
 
-ovirt.engine.extension.name = {{ realm_name }}-http-mapping
+ovirt.engine.extension.name = {{ ipa_realm }}-http-mapping
 ovirt.engine.extension.bindings.method = jbossmodule
 ovirt.engine.extension.binding.jbossmodule.module = org.ovirt.engine-extensions.aaa.misc
 ovirt.engine.extension.binding.jbossmodule.class = org.ovirt.engineextensions.aaa.misc.mapping.MappingExtension

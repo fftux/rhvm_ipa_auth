@@ -5,13 +5,13 @@
 # Last Ansible Run {{ ansible_date_time.date }}\:\: {{ ansible_date_time.time }}
 
 
-ovirt.engine.extension.name = {{ realm_name }}-http-authn
+ovirt.engine.extension.name = {{ ipa_realm }}-http-authn
 ovirt.engine.extension.bindings.method = jbossmodule
 ovirt.engine.extension.binding.jbossmodule.module = org.ovirt.engine-extensions.aaa.misc
 ovirt.engine.extension.binding.jbossmodule.class = org.ovirt.engineextensions.aaa.misc.http.AuthnExtension
 ovirt.engine.extension.provides = org.ovirt.engine.api.extensions.aaa.Authn
-ovirt.engine.aaa.authn.profile.name = {{ realm_name }}-http
-ovirt.engine.aaa.authn.authz.plugin = {{ realm_name }}-authz
-ovirt.engine.aaa.authn.mapping.plugin = {{ realm_name }}-http-mapping
+ovirt.engine.aaa.authn.profile.name = {{ ipa_realm }}-http
+ovirt.engine.aaa.authn.authz.plugin = {{ ipa_realm }}-authz
+ovirt.engine.aaa.authn.mapping.plugin = {{ ipa_realm }}-http-mapping
 config.artifact.name = HEADER
 config.artifact.arg = X-Remote-User

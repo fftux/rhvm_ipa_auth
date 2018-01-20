@@ -134,7 +134,7 @@
 
 
 - name: Have IPA sign the certificate for the service
-  shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal=HTTP/{{ ansible_hostname }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ bak_crt_path }}"
+  shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal={{ rhvm_service_principal }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ bak_crt_path }}"
 
 
 - name: Backup the existing bundle
