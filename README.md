@@ -16,7 +16,7 @@ There are roles to put the engine into and out of maintenance mode and a rhvm_ip
 - configures rhvm to use IPA a authentication source
 - restarts services appropriately
 
-NOTES:
+##NOTES:
 - these roles are not extensively "variablized" to reduce the required configuration as they are intended for a specific purpose
 - variables for the rhvm_ipa_auth role are located under group_vars - examples are provided complete documentation will follow.
 - the lab_builder project will eventually house this set of roles.
@@ -25,3 +25,9 @@ NOTES:
 
 Pull requests are welcome
 
+###Tested with:
+ipa --version
+VERSION: 4.5.0, API_VERSION: 2.228
+
+rpm -qa ovirt-engine
+ovirt-engine-4.1.3.5-0.1.el7.noarch
