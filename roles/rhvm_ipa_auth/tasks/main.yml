@@ -75,32 +75,6 @@
   shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-add {{ rhvm_service_principal }}"
 
 
-- name: Clean-up any previous keytab
-  file:
-    src: /etc/httpd/http.keytab
-    dest: "/etc/httpd/http.keytab.{{ ansible_date_time.time }}.bak"
-  ignore_errors: yes
-
-- file:
-    path: /etc/httpd/http.keytab
-    state: absent
-
-- name:  retrieve the keytab and store it in /etc/httpd
-  shell: "echo {{ipa_admin_password}} | kinit admin; ipa-getkeytab -p {{ rhvm_service_principal }} -s {{ ipa_server_fqdn }} -k  /etc/httpd/http.keytab"
-
-
-- name: Ensure the proper owner and permissions on the keytab file
-  file:
-    path: /etc/httpd/http.keytab
-    owner: apache
-    group: apache
-    mode: 0400
-
-    
-- name: Ensure we can authenticate with the keytab file
-  command: "kinit -kt /etc/httpd/http.keytab {{ rhvm_service_principal }}"
-
-
 - name: Clean up any existing Truststore for RHVM
   file:
     src: "/etc/ovirt-engine/aaa/{{ ipa_realm }}.jks"
@@ -172,16 +146,56 @@
   command: "openssl genrsa -des3 -out /etc/ipa/private/{{ ansible_nodename }}.pem -passout file:/etc/ipa/private/passout.txt 4096"
 
 - command: "openssl rsa -in /etc/ipa/private/{{ ansible_nodename }}.pem -out /etc/ipa/private/{{ ansible_nodename }}.password.key -passin file:/etc/ipa/private/passout.txt"
+
 - command: "openssl rsa -in /etc/ipa/private/{{ ansible_nodename }}.password.key -out /etc/ipa/private/{{ ansible_nodename }}.passwordless.key -passin file:/etc/ipa/private/passout.txt"
+
 - command: "cp /etc/ipa/private/{{ ansible_nodename }}.passwordless.key /etc/ipa/private/{{ ansible_nodename }}.key"
 
 
 - name: Create the CSR
-  command: "openssl req -new -key /etc/ipa/private/{{ ansible_nodename }}.password.key -out /etc/ipa/private/{{ ansible_nodename }}.csr -subj \"/C={{ csr_countryName }}/ST={{ csr_stateOrProvinceName }}/L={{ csr_localityName }}/O={{ csr_organizationName }}/OU={{ csr_organizationUnitName }}/CN={{ ansible_nodename }}/subjectAltName={{ ansible_nodename }}\""
+  command: "openssl req -new -key /etc/ipa/private/{{ ansible_nodename }}.password.key -out /etc/ipa/private/{{ ansible_nodename }}.csr -subj \"/C={{ csr_countryName }}/ST={{ csr_stateOrProvinceName }}/L={{ csr_localityName }}/O={{ csr_organizationName }}/OU={{ csr_organizationUnitName }}/CN={{ ansible_nodename }}/subjectAltName=DNS.1={{ ansible_nodename }}\""
 
 
 - name: Have IPA sign the certificate for the service
   shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal={{ rhvm_service_principal }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ ssl_crt_path }}"
+
+# Use to resolve issue with Chrome browser requiring subjectAltName
+# IdM will eventually add the commonName to subjectAltName
+# In the meantime we will just add this to certmonger 
+# and resubmit to get the subjectAltName included
+
+- name: Ensure that certmonger tracks the certificate for autorenewals
+  shell: "echo {{ ipa_admin_password }} | kinit admin;ipa-getcert start-tracking -k /etc/ipa/private/{{ ansible_nodename }}.passwordless.key -f /etc/ipa/private/{{ ansible_nodename }}.crt -I {{ ansible_nodename }}"
+
+- name: (workaround) Resubmit the request to ensure that the subjectAltName is included
+  shell: "echo {{ ipa_admin_password }} | kinit admin;ipa-getcert resubmit -i {{ ansible_nodename }}  -K {{ rhvm_service_principal }} -D {{ ansible_nodename }}"
+
+- command: "cp /etc/ipa/private/{{ ansible_nodename }}.passwordless.key /etc/ipa/private/{{ ansible_nodename }}.key"
+
+- name: Clean-up any previous keytab
+  file:
+    src: /etc/httpd/http.keytab
+    dest: "/etc/httpd/http.keytab.{{ ansible_date_time.time }}.bak"
+  ignore_errors: yes
+
+- file:
+    path: /etc/httpd/http.keytab
+    state: absent
+
+- name:  retrieve the keytab and store it in /etc/httpd
+  shell: "echo {{ipa_admin_password}} | kinit admin; ipa-getkeytab -p {{ rhvm_service_principal }} -s {{ ipa_server_fqdn }} -k  /etc/httpd/http.keytab"
+
+
+- name: Ensure the proper owner and permissions on the keytab file
+  file:
+    path: /etc/httpd/http.keytab
+    owner: apache
+    group: apache
+    mode: 0400
+
+
+- name: Ensure we can authenticate with the keytab file
+  command: "kinit -kt /etc/httpd/http.keytab {{ rhvm_service_principal }}"
 
 
 - name: Backup the existing bundle
