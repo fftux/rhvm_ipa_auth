@@ -26,6 +26,10 @@
 # Install some components that we need.
 #
 
+# in order to use some of the ansible public key tools we need
+# pyOpenSSL 16.x or greater - this requires EPEL
+# we will enable EPEL, get pip, upgrade pyOpenSSL, and then disable EPEL
+# we can do this or go the old fashioned route
 
 - name: Install ipa and the RHV authentication tools packages and update the system (this may take some time)
   yum:
@@ -50,10 +54,16 @@
 
 - name: Create a Service Principal Variable for the host
   set_fact: 
-    rhvm_service_principal: "HTTP/{{ ansible_hostname }}"
+    rhvm_service_principal: "HTTP/{{ ansible_nodename }}"
 
 - name: Setup the IdM Client
-  command: "ipa-client-install --domain={{ ipa_domain }} --server={{ ipa_server_fqdn }} --realm={{ ipa_realm }} --principal=admin --password={{ ipa_admin_password }} --mkhomedir --ssh-trust-dns --enable-dns-updates --force-ntpd --unattended"
+  command: "ipa-client-install --domain={{ ipa_domain }} --server={{ ipa_server_fqdn }} --realm={{ ipa_realm }} --principal=admin --password={{ ipa_admin_password }} --mkhomedir --ssh-trust-dns --enable-dns-updates --force-ntpd --unattended --force-join"
+
+
+- name: Wait for 10s for the IdM Client DNS entry to become available
+  wait_for:
+    timeout: 10
+  delegate_to: localhost
 
 
 - name: Clean up any previous service entries
@@ -64,6 +74,16 @@
 - name: Create a service in IPA for the RHVM Apache instance
   shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-add {{ rhvm_service_principal }}"
 
+
+- name: Clean-up any previous keytab
+  file:
+    src: /etc/httpd/http.keytab
+    dest: "/etc/httpd/http.keytab.{{ ansible_date_time.time }}.bak"
+  ignore_errors: yes
+
+- file:
+    path: /etc/httpd/http.keytab
+    state: absent
 
 - name:  retrieve the keytab and store it in /etc/httpd
   shell: "echo {{ipa_admin_password}} | kinit admin; ipa-getkeytab -p {{ rhvm_service_principal }} -s {{ ipa_server_fqdn }} -k  /etc/httpd/http.keytab"
@@ -81,6 +101,16 @@
   command: "kinit -kt /etc/httpd/http.keytab {{ rhvm_service_principal }}"
 
 
+- name: Clean up any existing Truststore for RHVM
+  file:
+    src: "/etc/ovirt-engine/aaa/{{ ipa_realm }}.jks"
+    dest: "/etc/ovirt-engine/aaa/{{ ipa_realm }}.jks.{{ ansible_date_time.time }}.bak"
+  ignore_errors: yes
+
+- file:
+    path: /etc/ovirt-engine/aaa/{{ ipa_realm }}.jks
+    state: absent
+
 - name: Use the IPA ca.crt file to create a truststore file for engine authentication
   command: "keytool -importcert -noprompt -trustcacerts -alias rootca -file /etc/ipa/ca.crt -keystore /etc/ovirt-engine/aaa/{{ ipa_realm }}.jks -storepass {{ keystore_password }}"
 
@@ -95,105 +125,127 @@
     mode: 0700
 
 
-- name: Generate private key
-  openssl_privatekey:
-    path: "{{ ssl_private_key_path }}"
-    passphrase: "{{ ssl_private_key_passphrase }}"
-    cipher: "{{ ssl_private_key_cipher }}"
-    size: "{{ ssl_private_key_size }}"
-    force: false
-    type: RSA
-    state: present
+#- name: Generate private key
+#  openssl_privatekey:
+#    path: "{{ ssl_private_key_path }}"
+#    passphrase: "{{ ssl_private_key_passphrase }}"
+#    cipher: "{{ ssl_private_key_cipher }}"
+#    size: "{{ ssl_private_key_size }}"
+#    force: false
+#    type: RSA
+#    state: present
 
 
-- name: Generate public key
-  openssl_publickey:
-    path: "{{ ssl_public_key_path }}"
-    privatekey_path: "{{ ssl_private_key_path }}"
-    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
-    format: "{{ ssl_public_key_format }}"
-    state: present
+#- name: Generate public key
+#  openssl_publickey:
+#    path: "{{ ssl_public_key_path }}"
+#    privatekey_path: "{{ ssl_private_key_path }}"
+#    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
+#    format: "{{ ssl_public_key_format }}"
+#    force: true
+#    state: present
+
+#- name: Generate csr
+#  openssl_csr:
+#    path: "{{ csr_path }}"
+#    privatekey_path: "{{ ssl_private_key_path }}"
+#    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
+#    state: present
+#    commonName: "{{ ansible_hostname }}"
+#    emailAddress: "{{ csr_emailAddress }}"
+#    organizationName: "{{ csr_organizationName }}"
+#    organizationalUnitName: "{{ csr_organizationUnitName }}"
+#    countryName: "{{ csr_countryName }}"
+#    stateOrProvinceName: "{{ csr_stateOrProvinceName }}"
+#    localityName: "{{ csr_localityName }}"
+#    digest: "{{ csr_digest }}"
+#    subjectAltName: "DNS:{{ ansible_nodename }}"
+#    subjectAltName_critical: true
 
 
-- name: Generate csr
-  openssl_csr:
-    path: "{{ csr_path }}"
-    privatekey_path: "{{ ssl_private_key_path }}"
-    privatekey_passphrase: "{{ ssl_private_key_passphrase }}"
-    state: present
-    commonName: "{{ ansible_hostname }}"
-    emailAddress: "{{ csr_emailAddress }}"
-    organizationName: "{{ csr_organizationName }}"
-    organizationalUnitName: "{{ csr_organizationUnitName }}"
-    countryName: "{{ csr_countryName }}"
-    stateOrProvinceName: "{{ csr_stateOrProvinceName }}"
-    localityName: "{{ csr_localityName }}"
-    digest: "{{ csr_digest }}"
-    subjectAltName: "DNS:{{ ansible_hostname }}"
-    subjectAltName_critical: true
+# certficate commands are not working even with pyOpenSSL > 16.0
+
+- name: Create a text file
+  shell: "echo {{ ssl_private_key_passphrase }} > /etc/ipa/private/passout.txt"
+
+- name: Generate the key to use for apache
+  command: "openssl genrsa -des3 -out /etc/ipa/private/{{ ansible_nodename }}.pem -passout file:/etc/ipa/private/passout.txt 4096"
+
+- command: "openssl rsa -in /etc/ipa/private/{{ ansible_nodename }}.pem -out /etc/ipa/private/{{ ansible_nodename }}.password.key -passin file:/etc/ipa/private/passout.txt"
+- command: "openssl rsa -in /etc/ipa/private/{{ ansible_nodename }}.password.key -out /etc/ipa/private/{{ ansible_nodename }}.passwordless.key -passin file:/etc/ipa/private/passout.txt"
+- command: "cp /etc/ipa/private/{{ ansible_nodename }}.passwordless.key /etc/ipa/private/{{ ansible_nodename }}.key"
+
+
+- name: Create the CSR
+  command: "openssl req -new -key /etc/ipa/private/{{ ansible_nodename }}.password.key -out /etc/ipa/private/{{ ansible_nodename }}.csr -subj \"/C={{ csr_countryName }}/ST={{ csr_stateOrProvinceName }}/L={{ csr_localityName }}/O={{ csr_organizationName }}/OU={{ csr_organizationUnitName }}/CN={{ ansible_nodename }}/subjectAltName={{ ansible_nodename }}\""
 
 
 - name: Have IPA sign the certificate for the service
-  shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal={{ rhvm_service_principal }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ bak_crt_path }}"
+  shell: "echo {{ ipa_admin_password }} | kinit admin; ipa cert-request --add --principal={{ rhvm_service_principal }} {{ csr_path }} | grep -i 'Serial number:'| awk '{gsub(\" Serial number: \",\"\"); print $1}'  | ipa cert-show --out={{ ssl_crt_path }}"
 
 
 - name: Backup the existing bundle
-  file:
+  copy: 
     src: /etc/pki/ovirt-engine/keys/apache.p12
     dest: /etc/pki/ovirt-engine/keys/apache.p12.rhvm_ipa_auth.bak
-
+    remote_src: yes
 
 - name: Backup the existing CA certificate (belt and suspenders)
-  file: 
+  copy:
     src: /etc/pki/ovirt-engine/ca.pem
     dest: /etc/pki/ovirt-engine/ca.pem.rhvm_ipa_auth.bak
+    remote_src: yes
 
+- name: Backup the existing apache-ca CA certificate (belt and suspenders)
+  copy:
+    src: /etc/pki/ovirt-engine/apache-ca.pem
+    dest: /etc/pki/ovirt-engine/apache-ca.pem.rhvm_ipa_auth.bak
+    remote_src: yes
 
 - name: Backup the existing private key
-  file:
+  copy:
     src: /etc/pki/ovirt-engine/keys/apache.key.nopass
-    dest: /etc/pki/ovirt-engine/keys/apache.key.nopass.rhvm_ipa_auth.bak
-
+    dest: /etc/pki/ovirt-engine/keys/apache.key.nopass.rhvm_ipa_auth.bak\
+    remote_src: yes
 
 - name: Backup the exiting certificate
-  file:
+  copy:
     src: /etc/pki/ovirt-engine/certs/apache.cer
     dest: /etc/pki/ovirt-engine/certs/apache.cer.rhvm_ipa_auth.bak
-
+    remote_src: yes
 
 - name: Add ipa ca cert to the host-wide trust store
-  file: 
+  copy: 
     src: /etc/ipa/ca.crt
-    dest: /etc/pki/ca-trust/source/anchors
-
+    dest: /etc/pki/ca-trust/source/anchors/ipa-ca.crt
+    remote_src: yes
 
 - name: Update the running trust info
   command: update-ca-trust
 
 
-- name: Remove the symbolic link to the apache-ca.pem certificate
-  command: rm /etc/pki/ovirt-engine/apache-ca.pem
-
-
 - name: Copy the IPA CA cert to the expected Engine CA Cert location (replace ln)
-  file:
+  copy:
     src: /etc/ipa/ca.crt
     dest: /etc/pki/ovirt-engine/apache-ca.pem
+    remote_src: yes
 
 
 - name: Copy the new private key to the appropriate location
-  file:
+  copy:
     src: "{{ ssl_private_key_path }}"
     dest: /etc/pki/ovirt-engine/keys/apache.key.nopass
+    remote_src: yes
 
 
 - name: Copy the SSL cert to the proper location
-  file:
+  copy:
     src: "{{ ssl_crt_path }}"
     dest: /etc/pki/ovirt-engine/certs/apache.cer
     mode: 0400
     owner: apache
     group: apache
+    remote_src: yes
 
 
 # Apply the templates for LDAP and Kerberos integration

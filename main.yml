@@ -4,17 +4,24 @@
 
 - name: Put the cluster into Global Maintenance
   hosts: rhv_engine_host
-    roles:
-      - global_maintenance
+  roles:
+  - global_maintenance
 
 - name: Apply the configuration for IPA authentication
   hosts: rhvm_vm
-    roles:
-      - rhvm_ipa_auth
+  vars_prompt: 
+    - name: ipa_admin_password
+      prompt: "Enter the password for ipa user admin:"
+    - name: keystore_password
+      prompt: "Enter the keystore password:"
+    - name: ssl_private_key_passphrase
+      prompt: "Enter an SSL private key passphrase:"
+  roles:
+  - rhvm_ipa_auth
 
 
 - name: Take the cluster out of Global Maintenance
   hosts: rhv_engine_host
-    roles:
-      - none_maintenance
+  roles:
+  - none_maintenance
 
