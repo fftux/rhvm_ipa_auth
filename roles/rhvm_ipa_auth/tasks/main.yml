@@ -20,7 +20,7 @@
   command: subscription-manager repos --enable=jb-eap-7-for-rhel-7-server-rpms
 
 - name: Enable the Satellite Tools 6.2 rpms
-  command: subscription-manager repos --enable=rhel-7-server-satellite-tools-6.2-rpms
+  command: subscription-manager repos --enable=rhel-7-server-satellite-tools-6.3-rpms
 
 # Make sure that the system is up to date
 # Install some components that we need.
