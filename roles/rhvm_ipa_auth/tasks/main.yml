@@ -19,7 +19,7 @@
 - name: Enable the JBoss EAP 7 rpms
   command: subscription-manager repos --enable=jb-eap-7-for-rhel-7-server-rpms
 
-- name: Enable the Satellite Tools 6.2 rpms
+- name: Enable the Satellite Tools rpms
   command: subscription-manager repos --enable=rhel-7-server-satellite-tools-6.3-rpms
 
 # Make sure that the system is up to date
@@ -31,26 +31,50 @@
 # we will enable EPEL, get pip, upgrade pyOpenSSL, and then disable EPEL
 # we can do this or go the old fashioned route
 
-- name: Install ipa and the RHV authentication tools packages and update the system (this may take some time)
+- name: Install the ipa client
   yum:
-    package: "{{ item }}"
+    package: ipa-client
     state: latest
     update_cache: yes
-  with_items:
-  - ipa-client
-  - ipa-admintools
-  - ovirt-engine-extension-aaa-ldap-setup
-  - ovirt-engine-extension-aaa-misc
-  - ovirt-engine-extension-aaa-ldap
-  - mod_auth_gssapi
-  - mod_session
-  - '*'
 
+- name: Install ipa administration tools
+  yum:
+    package: ipa-admintools
+    state: latest
 
-- name: Unregister the host if it is already registered
+- name: Install ovirt ldap extensions setup
+  yum:
+    package: ovirt-engine-extension-aaa-ldap-setup
+    state: latest
+
+- name: Install ovirt ldap extensions
+  yum:
+    package: ovirt-engine-extension-aaa-ldap
+    state: latest
+
+- name: Install ovirt misc extensions
+  yum:
+    package: ovirt-engine-extension-aaa-misc
+    state: latest
+
+- name: Install apache GSS API Authentication module
+  yum:
+    package: mod_auth_gssapi
+    state: latest
+
+- name: Install apache Session module
+  yum:
+    package: mod_session
+    state: latest
+
+- name: Update the server to the latest code
+  yum:
+    package: '*'
+    state: latest
+
+- name: Force a cleanup of IdM - Unregister the host from IdM if it is already registered
   command: ipa-client-install --uninstall --unattended
   ignore_errors: true
-
 
 - name: Create a Service Principal Variable for the host
   set_fact: 
@@ -59,19 +83,17 @@
 - name: Setup the IdM Client
   command: "ipa-client-install --domain={{ ipa_domain }} --server={{ ipa_server_fqdn }} --realm={{ ipa_realm }} --principal=admin --password={{ ipa_admin_password }} --mkhomedir --ssh-trust-dns --enable-dns-updates --force-ntpd --unattended --force-join"
 
-
 - name: Wait for 10s for the IdM Client DNS entry to become available
   wait_for:
     timeout: 10
   delegate_to: localhost
-
 
 - name: Clean up any previous service entries
   shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-del {{ rhvm_service_principal }}"
   ignore_errors: true
 
 
-- name: Create a service in IPA for the RHVM Apache instance
+- name: Create a service in IdM for the RHVM Apache instance
   shell: "echo {{ipa_admin_password}} | kinit admin; ipa service-add {{ rhvm_service_principal }}"
 
 
