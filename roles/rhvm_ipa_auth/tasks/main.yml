@@ -1,26 +1,8 @@
 ---
 # configure the rhv manager
 #
-- name: Disable all existing repos
-  command: subscription-manager repos --disable=*
-
-- name: Enable the RHEL 7 server rpms
-  command: subscription-manager repos --enable=rhel-7-server-rpms
-
-- name: Enable the RHEL 7 Supplementary rpms
-  command: subscription-manager repos --enable=rhel-7-server-supplementary-rpms
-
-- name: Enable the RHV Manager 4.1 rpms
-  command: subscription-manager repos --enable=rhel-7-server-rhv-4.1-manager-rpms
-
-- name: Enable the RHV Manager Tools rpms
-  command: subscription-manager repos --enable=rhel-7-server-rhv-4-manager-tools-rpms
-
-- name: Enable the JBoss EAP 7 rpms
-  command: subscription-manager repos --enable=jb-eap-7-for-rhel-7-server-rpms
-
-- name: Enable the Satellite Tools rpms
-  command: subscription-manager repos --enable=rhel-7-server-satellite-tools-6.3-rpms
+- name: Ensure correct repos are enabled
+  command: subscription-manager repos --disable='*' --enable=rhel-8-for-x86_64-baseos-rpms --enable=rhel-8-for-x86_64-appstream-rpms --enable=rhv-4.4-manager-for-rhel-8-x86_64-rpms --enable=fast-datapath-for-rhel-8-x86_64-rpms --enable=ansible-2.9-for-rhel-8-x86_64-rpms --enable=jb-eap-7.3-for-rhel-8-x86_64-rpms
 
 # Make sure that the system is up to date
 # Install some components that we need.
@@ -33,43 +15,43 @@
 
 - name: Install the ipa client
   yum:
-    package: ipa-client
+    name: ipa-client
     state: latest
     update_cache: yes
 
 - name: Install ipa administration tools
   yum:
-    package: ipa-admintools
+    name: ipa-admintools
     state: latest
 
 - name: Install ovirt ldap extensions setup
   yum:
-    package: ovirt-engine-extension-aaa-ldap-setup
+    name: ovirt-engine-extension-aaa-ldap-setup
     state: latest
 
 - name: Install ovirt ldap extensions
   yum:
-    package: ovirt-engine-extension-aaa-ldap
+    name: ovirt-engine-extension-aaa-ldap
     state: latest
 
 - name: Install ovirt misc extensions
   yum:
-    package: ovirt-engine-extension-aaa-misc
+    name: ovirt-engine-extension-aaa-misc
     state: latest
 
 - name: Install apache GSS API Authentication module
   yum:
-    package: mod_auth_gssapi
+    name: mod_auth_gssapi
     state: latest
 
 - name: Install apache Session module
   yum:
-    package: mod_session
+    name: mod_session
     state: latest
 
 - name: Update the server to the latest code
   yum:
-    package: '*'
+    name: '*'
     state: latest
 
 - name: Force a cleanup of IdM - Unregister the host from IdM if it is already registered
